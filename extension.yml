@@ -1,0 +1,5 @@
+owner: doxxx93
+name: gh-cmt
+tag: v0.1.0
+host: github.com
+description: AI-powered commit message generator using GitHub Models API
