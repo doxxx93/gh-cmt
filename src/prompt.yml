@@ -16,19 +16,18 @@ messages:
 
       Guidelines:
 
+      - Generate exactly ONE commit message for ALL the changes combined
+
+      - Use a single conventional commit type and scope for the subject line
+        (e.g. "feat(cli): ...")
+
       - Each line should be no longer than 72 characters
 
-      - Keep it professional but conversational
-
-      - Focus on meaningful work rather than trivial changes
-
-      - Group related changes together
-
-      - Highlight significant contributions like new features, bug fixes
+      - Focus on the overall purpose of the changes, not each file
 
       - Be concise but informative
 
-      - Use bullet points for clarity
+      - Use bullet points in the body for clarity
 
       - Output the commit message as plain text only. Do NOT wrap it in
         markdown code blocks, backticks, or any other formatting
