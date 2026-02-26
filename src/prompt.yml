@@ -30,6 +30,9 @@ messages:
 
       - Use bullet points for clarity
 
+      - Output the commit message as plain text only. Do NOT wrap it in
+        markdown code blocks, backticks, or any other formatting
+
       {{examples}}
   - role: user
     content: |

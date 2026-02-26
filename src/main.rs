@@ -1,66 +1,109 @@
+mod config;
 mod git;
 mod llm;
 
 use std::io::{self, Write};
 use std::process::Command;
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
+
+use config::Config;
 
 #[derive(Parser)]
 #[command(name = "gh-cmt", about = "AI-powered commit message generator")]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+
     /// Commit message language
-    #[arg(short, long, default_value = "english")]
-    language: String,
+    #[arg(short, long)]
+    language: Option<String>,
 
     /// GitHub Models model to use
-    #[arg(short, long, default_value = "openai/gpt-4o")]
-    model: String,
+    #[arg(short, long)]
+    model: Option<String>,
 
     /// Number of previous commits to use as context
-    #[arg(short, long, default_value_t = 3)]
-    examples: u32,
+    #[arg(short, long)]
+    examples: Option<u32>,
 
     /// Auto-commit without confirmation
     #[arg(short, long)]
     yes: bool,
 }
 
+#[derive(Subcommand)]
+enum Commands {
+    /// Manage configuration
+    Config {
+        /// Show current config and exit
+        #[arg(short, long)]
+        show: bool,
+
+        /// Reset config to defaults
+        #[arg(short, long)]
+        reset: bool,
+    },
+}
+
 fn main() {
     let cli = Cli::parse();
 
-    if let Err(e) = run(&cli) {
+    let result = match &cli.command {
+        Some(Commands::Config { show, reset }) => {
+            if *reset {
+                config::reset_config()
+            } else if *show {
+                config::show_config()
+            } else {
+                config::run_config_interactive()
+            }
+        }
+        None => {
+            let cfg = Config::load();
+            run_generate(&cli, &cfg)
+        }
+    };
+
+    if let Err(e) = result {
         eprintln!("Error: {e}");
         std::process::exit(1);
     }
 }
 
-fn run(cli: &Cli) -> Result<(), String> {
+fn run_generate(cli: &Cli, cfg: &Config) -> Result<(), String> {
     if !git::is_git_repository() {
         return Err("Not a git repository.".into());
     }
 
+    let language = cli.language.as_deref()
+        .or(cfg.language.as_deref())
+        .unwrap_or("english");
+    let model = cli.model.as_deref()
+        .or(cfg.model.as_deref())
+        .unwrap_or("openai/gpt-4o");
+    let examples_count = cli.examples
+        .or(cfg.examples)
+        .unwrap_or(3);
+    let auto_commit = cli.yes || cfg.auto_commit.unwrap_or(false);
+
     let changes = git::get_staged_changes()?;
 
-    let examples = if cli.examples > 0 {
-        git::get_commit_messages(cli.examples)?
+    let examples = if examples_count > 0 {
+        git::get_commit_messages(examples_count)?
     } else {
         String::new()
     };
 
-    eprintln!("Generating commit message with {}...", cli.model);
+    let mut message = generate(&changes, language, model, &examples)?;
 
-    let message = llm::generate_commit_message(&changes, &cli.language, &cli.model, &examples)?;
-
-    println!("\n{message}\n");
-
-    if cli.yes {
+    if auto_commit {
         git::commit(&message)?;
         return Ok(());
     }
 
     loop {
-        eprint!("[c]ommit / [e]dit / [a]bort: ");
+        eprint!("[c]ommit / [e]dit / [r]egenerate / [a]bort: ");
         io::stderr().flush().unwrap();
 
         let mut input = String::new();
@@ -83,15 +126,25 @@ fn run(cli: &Cli) -> Result<(), String> {
                 git::commit(&edited)?;
                 return Ok(());
             }
+            "r" | "regenerate" => {
+                message = generate(&changes, language, model, &examples)?;
+            }
             "a" | "abort" => {
                 eprintln!("Aborted.");
                 return Ok(());
             }
             _ => {
-                eprintln!("Invalid choice. Please enter c, e, or a.");
+                eprintln!("Invalid choice. Please enter c, e, r, or a.");
             }
         }
     }
+}
+
+fn generate(changes: &str, language: &str, model: &str, examples: &str) -> Result<String, String> {
+    eprintln!("Generating commit message with {model}...");
+    let message = llm::generate_commit_message(changes, language, model, examples)?;
+    println!("\n{message}\n");
+    Ok(message)
 }
 
 fn edit_message(message: &str) -> Result<String, String> {

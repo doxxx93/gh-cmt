@@ -149,6 +149,12 @@ pub fn generate_commit_message(
     chat_response
         .choices
         .first()
-        .map(|c| c.message.content.trim().to_string())
+        .map(|c| strip_code_block(c.message.content.trim()))
         .ok_or_else(|| "No response from model".into())
+}
+
+fn strip_code_block(s: &str) -> String {
+    let s = s.strip_prefix("```").unwrap_or(s);
+    let s = s.strip_suffix("```").unwrap_or(s);
+    s.trim().to_string()
 }
